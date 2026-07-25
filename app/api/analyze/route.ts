@@ -1,31 +1,5 @@
 export const runtime = "edge";
 
-const demo = {
-  score: 3.7,
-  confidence: 88,
-  type: "电商场景图",
-  findings: [
-    {
-      id: 1, title: "主体局部结构不自然", category: "结构合理性", severity: "高",
-      reason: "局部轮廓与相邻物体出现不合理融合，结构连接关系缺乏真实支撑。",
-      advice: "重新生成或精修该局部，明确物体边缘、遮挡层级与连接关系。",
-      box: { x: 61, y: 32, width: 18, height: 25 },
-    },
-    {
-      id: 2, title: "光影与环境关系矛盾", category: "光影反射", severity: "中",
-      reason: "主体高光方向与背景主光源不一致，接触阴影也偏弱。",
-      advice: "统一主光方向，降低冲突高光，并补充符合接触面的自然阴影。",
-      box: { x: 42, y: 51, width: 20, height: 29 },
-    },
-    {
-      id: 3, title: "细节纹理存在生成痕迹", category: "材质纹理", severity: "中",
-      reason: "局部纹理重复且边缘过度平滑，与真实拍摄的细节变化不符。",
-      advice: "减少重复纹理，增加材质细微差异并保留适量真实噪点。",
-      box: { x: 46, y: 61, width: 12, height: 10 },
-    },
-  ],
-};
-
 export async function POST(request: Request) {
   const form = await request.formData();
   const file = form.get("image");
@@ -37,7 +11,12 @@ export async function POST(request: Request) {
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return Response.json({ ...demo, demoMode: true });
+  if (!apiKey) {
+    return Response.json(
+      { error: "AI 服务尚未配置，请联系管理员设置 API Key。", code: "AI_NOT_CONFIGURED" },
+      { status: 503 },
+    );
+  }
 
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -59,12 +38,27 @@ export async function POST(request: Request) {
         text: { format: { type: "json_object" } },
       }),
     });
-    if (!response.ok) throw new Error("OpenAI request failed");
+    if (!response.ok) {
+      const failure = await response.json().catch(() => null) as { error?: { code?: string; message?: string } } | null;
+      const quotaExceeded = response.status === 429;
+      return Response.json(
+        {
+          error: quotaExceeded
+            ? "OpenAI API 当前无可用额度，请管理员检查计费设置。"
+            : "AI 检测服务调用失败，请稍后重试。",
+          code: quotaExceeded ? "AI_QUOTA_EXCEEDED" : failure?.error?.code || "AI_REQUEST_FAILED",
+        },
+        { status: quotaExceeded ? 503 : 502 },
+      );
+    }
     const result = await response.json() as { output_text?: string; output?: Array<{ content?: Array<{ text?: string }> }> };
     const raw = result.output_text || result.output?.[0]?.content?.[0]?.text;
     if (!raw) throw new Error("Empty model response");
     return Response.json(JSON.parse(raw));
   } catch {
-    return Response.json({ ...demo, fallback: true });
+    return Response.json(
+      { error: "AI 检测服务连接失败，请稍后重试。", code: "AI_CONNECTION_FAILED" },
+      { status: 502 },
+    );
   }
 }
