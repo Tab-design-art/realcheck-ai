@@ -79,14 +79,14 @@ export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem("realcheck-history");
+    const stored = localStorage.getItem("realcheck-history-v2");
     if (stored) {
       try { setReviews(JSON.parse(stored)); } catch {}
     }
   }, []);
 
   useEffect(() => {
-    if (reviews.length) localStorage.setItem("realcheck-history", JSON.stringify(reviews));
+    if (reviews.length) localStorage.setItem("realcheck-history-v2", JSON.stringify(reviews));
   }, [reviews]);
 
   const stats = useMemo(() => {
