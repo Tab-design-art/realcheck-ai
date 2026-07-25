@@ -65,6 +65,30 @@ function scoreTone(score: number) {
   return "safe";
 }
 
+async function normalizeForAnalysis(file: File) {
+  if (file.type === "image/jpeg") return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext("2d");
+    if (!context) return file;
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.92),
+    );
+    return blob
+      ? new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" })
+      : file;
+  } catch {
+    return file;
+  }
+}
+
 export default function Home() {
   const [activeNav, setActiveNav] = useState("新建检测");
   const [mode, setMode] = useState<"single" | "batch">("single");
@@ -127,13 +151,14 @@ export default function Home() {
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       try {
+        const analysisFile = await normalizeForAnalysis(file);
         const form = new FormData();
-        form.append("image", file);
+        form.append("image", analysisFile);
         let response = await fetch("/api/analyze", { method: "POST", body: form });
         if (response.status === 502 || response.status === 503) {
           await new Promise((resolve) => setTimeout(resolve, 800));
           const retryForm = new FormData();
-          retryForm.append("image", file);
+          retryForm.append("image", analysisFile);
           response = await fetch("/api/analyze", { method: "POST", body: retryForm });
         }
         const data = await response.json();
@@ -226,7 +251,7 @@ export default function Home() {
             <p>设计审核中心 <span>/</span> {activeNav}</p>
           </div>
           <div className="top-actions">
-            <span className="model-chip"><i /> 豆包 Seed 2.0 视觉引擎</span>
+            <span className="model-chip"><i /> Gemini 3.5 Flash 视觉引擎</span>
             <button className="icon-button">⌕</button>
             <button className="icon-button">♢<em /></button>
           </div>
