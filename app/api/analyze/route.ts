@@ -66,6 +66,9 @@ export async function POST(request: Request) {
             ? "Gemini 当前无可用额度或请求过于频繁，请检查配额设置。"
             : "Gemini 检测服务调用失败，请稍后重试。",
           code: quotaExceeded ? "GEMINI_QUOTA_EXCEEDED" : failure?.error?.code || "GEMINI_REQUEST_FAILED",
+          ...(process.env.AI_DEBUG_ERRORS === "true" && {
+            detail: failure?.error?.message || `Gemini HTTP ${response.status}`,
+          }),
         },
         { status: quotaExceeded ? 503 : 502 },
       );
