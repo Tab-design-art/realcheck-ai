@@ -123,6 +123,7 @@ export default function Home() {
     if (!files.length) return notify("请先上传需要审核的图片");
     setLoading(true);
     const results: Review[] = [];
+    const failures: string[] = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       try {
@@ -130,6 +131,12 @@ export default function Home() {
         form.append("image", file);
         const response = await fetch("/api/analyze", { method: "POST", body: form });
         const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "AI 检测服务暂时不可用");
+        }
+        if (data.demoMode || data.fallback || typeof data.score !== "number") {
+          throw new Error("检测结果未通过真实性校验");
+        }
         const score = clampScore(Number(data.score ?? 3.4));
         results.push({
           id: crypto.randomUUID(),
@@ -140,23 +147,25 @@ export default function Home() {
           type: data.type || "电商场景图",
           confidence: Number(data.confidence || 88),
           createdAt: new Date().toLocaleString("zh-CN", { hour12: false }),
-          findings: data.findings?.length ? data.findings : demoFindings,
+          findings: Array.isArray(data.findings) ? data.findings : [],
         });
-      } catch {
-        const score = clampScore(3.1 + (file.size % 13) / 10);
-        results.push({
-          id: crypto.randomUUID(), name: file.name, url: previews[i], score,
-          status: score >= 3 ? "不合格" : "合格", type: "电商图片",
-          confidence: 82, createdAt: new Date().toLocaleString("zh-CN", { hour12: false }),
-          findings: demoFindings,
-        });
+      } catch (error) {
+        failures.push(error instanceof Error ? error.message : `${file.name} 检测失败`);
       }
     }
-    setReviews((previous) => [...results, ...previous].slice(0, 50));
-    setSelected(results[0]);
-    setSelectedFinding(1);
+    if (results.length) {
+      setReviews((previous) => [...results, ...previous].slice(0, 50));
+      setSelected(results[0]);
+      setSelectedFinding(1);
+    } else {
+      setSelected(null);
+    }
     setLoading(false);
-    notify(files.length > 1 ? `已完成 ${files.length} 张图片检测` : "检测完成，已生成审核报告");
+    if (failures.length) {
+      notify(`检测未完成：${failures[0]}`);
+    } else {
+      notify(files.length > 1 ? `已完成 ${files.length} 张图片检测` : "检测完成，已生成审核报告");
+    }
   }
 
   function exportCsv() {
@@ -305,7 +314,7 @@ export default function Home() {
             </aside>
           </section>
 
-          {(selected || currentImage) && (
+          {selected && (
             <section className="result-section">
               <div className="result-title">
                 <div><span className="step">03</span><div><h2>检测报告</h2><p>{selected?.name || files[0]?.name}</p></div></div>
