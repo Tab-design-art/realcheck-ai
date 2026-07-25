@@ -129,7 +129,13 @@ export default function Home() {
       try {
         const form = new FormData();
         form.append("image", file);
-        const response = await fetch("/api/analyze", { method: "POST", body: form });
+        let response = await fetch("/api/analyze", { method: "POST", body: form });
+        if (response.status === 502 || response.status === 503) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          const retryForm = new FormData();
+          retryForm.append("image", file);
+          response = await fetch("/api/analyze", { method: "POST", body: retryForm });
+        }
         const data = await response.json();
         if (!response.ok) {
           throw new Error(data.error || "AI 检测服务暂时不可用");
@@ -220,7 +226,7 @@ export default function Home() {
             <p>设计审核中心 <span>/</span> {activeNav}</p>
           </div>
           <div className="top-actions">
-            <span className="model-chip"><i /> GPT-5.6 视觉引擎</span>
+            <span className="model-chip"><i /> 豆包 Seed 2.0 视觉引擎</span>
             <button className="icon-button">⌕</button>
             <button className="icon-button">♢<em /></button>
           </div>
